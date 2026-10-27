@@ -1,0 +1,27 @@
+- name: Update Wazuh Agents 
+  hosts: ssh_key_auth
+  gather_facts: false
+
+
+  tasks:
+    - name: Switch to alternate auth method
+      ansible.builtin.import_role: 
+        name: ebocom.linux.ssh_key_auth
+      when: "'ssh_key_auth' in group_names"
+      delegate_to: localhost
+      tags: [always]
+      run_once: true
+
+    - name: Reset connection (just in case)
+      ansible.builtin.meta: reset_connection
+  
+    - name: Gather facts for this role
+      tags: [always]
+      ansible.builtin.setup: {}
+    
+    - name: Update Wazuh agent to latest version 
+      become: yes
+      ansible.builtin.import_role:
+        name: ebocom.linux.wazuh_agent_upgrade
+
+
