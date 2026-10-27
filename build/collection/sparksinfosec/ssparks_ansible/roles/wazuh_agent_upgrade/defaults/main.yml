@@ -1,0 +1,5 @@
+---
+# defaults file for wazuh-upgrade
+wazuh_local_rpm_path: "wazuh-agent-4.14.9-1.x86_64.rpm"
+wazuh_remote_rpm_path: "/tmp/wazuh-agent-latest.rpm"
+wazuh_target_version: "4.14.9"

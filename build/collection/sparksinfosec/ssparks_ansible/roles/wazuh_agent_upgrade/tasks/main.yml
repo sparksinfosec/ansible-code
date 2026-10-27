@@ -1,0 +1,78 @@
+---
+# tasks file for wazuh-upgrade
+- name: Gather package facts before upgrade
+  ansible.builtin.package_facts:
+    manager: auto
+
+- name: Record initial version
+  ansible.builtin.set_fact:
+    version_before: "{{ ansible_facts.packages['wazuh-agent'][0].version if 'wazuh-agent' in ansible_facts.packages else 'Not Installed' }}"
+
+- name: Stop running if Wazuh Agent is not installed
+  ansible.builtin.meta: end_host
+  when: version_before == 'Not Installed'
+
+- name: Print version before upgrade
+  ansible.builtin.debug:
+    msg: "Current Wazuh Agent version is: {{ version_before }}"
+
+- name: Stop running if Wazuh Agent is already at the target version
+  ansible.builtin.meta: end_host
+  when: version_before == wazuh_target_version
+
+- name: Copy the new Wazuh agent RPM package to the remote server
+  ansible.builtin.copy:
+    src: "{{ wazuh_local_rpm_path }}"
+    dest: "{{ wazuh_remote_rpm_path | default('/tmp/wazuh-agent-latest.rpm') }}"
+    mode: '0644'
+
+- name: Stop the Wazuh agent service before upgrading
+  ansible.builtin.systemd_service:
+    name: wazuh-agent
+    state: stopped
+
+- name: Backup the current Wazuh agent configuration file
+  ansible.builtin.copy:
+    src: /var/ossec/etc/ossec.conf
+    dest: "/var/ossec/etc/ossec.conf.bak.{{ ansible_date_time.epoch }}"
+    remote_src: yes
+    mode: '0640'
+    owner: root
+    group: wazuh
+
+- name: Install the new Wazuh agent RPM package
+  ansible.builtin.dnf:
+    name: "{{ wazuh_remote_rpm_path | default('/tmp/wazuh-agent-latest.rpm') }}"
+    state: present
+    disable_gpg_check: no
+
+- name: Remove the copied RPM package from the remote server
+  ansible.builtin.file:
+    path: "{{ wazuh_remote_rpm_path | default('/tmp/wazuh-agent-latest.rpm') }}"
+    state: absent
+
+- name: Start and enable the updated Wazuh agent service
+  ansible.builtin.systemd_service:
+    name: wazuh-agent
+    state: started
+    enabled: yes
+    daemon_reload: yes
+
+- name: Gather package facts after upgrade
+  ansible.builtin.package_facts:
+    manager: auto
+
+- name: Record final version
+  ansible.builtin.set_fact:
+    version_after: "{{ ansible_facts.packages['wazuh-agent'][0].version if 'wazuh-agent' in ansible_facts.packages else 'Install Failed' }}"
+
+- name: Print version after upgrade
+  ansible.builtin.debug:
+    msg: "Upgraded Wazuh Agent version is: {{ version_after }}"
+
+- name: Confirm the version actually changed/upgraded
+  ansible.builtin.assert:
+    that:
+      - version_before != version_after
+    fail_msg: "Upgrade verification failed! The version did not change from {{ version_before }}."
+    success_msg: "Successfully verified upgrade from {{ version_before }} to {{ version_after }}!"
